@@ -1,12 +1,7 @@
 import { Bot } from "grammy";
 import { NextRequest, NextResponse } from "next/server";
 import { Ratelimit } from "@upstash/ratelimit";
-import {
-  redis,
-  incrementEmailCount,
-  incrementRoleCount,
-  saveEmail,
-} from "@/lib/redis";
+import { redis, incrementEmailCount, incrementRoleCount, saveEmail } from "@/lib/redis";
 import { validateEmail, sanitizeEmail } from "@/lib/validators";
 
 const bot = new Bot(process.env.TELEGRAM_BOT_TOKEN!);
@@ -20,19 +15,24 @@ const ratelimit = new Ratelimit({
 
 // Verify Turnstile
 async function verifyTurnstile(token: string): Promise<boolean> {
-  const response = await fetch(
-    "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        secret: process.env.TURNSTILE_SECRET_KEY!,
-        response: token,
-      }),
-    }
-  );
-  const data = await response.json();
-  return data.success === true;
+  try {
+    const response = await fetch(
+      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          secret: process.env.TURNSTILE_SECRET_KEY!,
+          response: token,
+        }),
+      }
+    );
+    const data = await response.json();
+    return data.success === true;
+  } catch (error) {
+    console.error("Turnstile verification error:", error);
+    return false;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -58,10 +58,11 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
     const isValidTurnstile = await verifyTurnstile(turnstileToken);
     if (!isValidTurnstile) {
       return NextResponse.json(
-        { error: "Verification failed" },
+        { error: "Verification failed. Please try again." },
         { status: 400 }
       );
     }
@@ -73,6 +74,7 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
     const sanitizedEmail = sanitizeEmail(email);
     if (!validateEmail(sanitizedEmail)) {
       return NextResponse.json(
@@ -91,9 +93,11 @@ export async function POST(req: NextRequest) {
     }
 
     // 6. Save to Redis
-    await saveEmail(sanitizedEmail, role);
-    await incrementEmailCount();
-    await incrementRoleCount(role);
+    await Promise.all([
+      saveEmail(sanitizedEmail, role),
+      incrementEmailCount(),
+      incrementRoleCount(role),
+    ]);
 
     // 7. Send Telegram message
     const message = `

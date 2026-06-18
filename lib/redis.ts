@@ -16,13 +16,14 @@ export async function incrementRoleCount(role: string) {
 }
 
 export async function getRoleStats(): Promise<Record<string, number>> {
-  return await redis.hgetall<Record<string, number>>("role_counts") || {};
+  return (await redis.hgetall<Record<string, number>>("role_counts")) || {};
 }
 
 export async function saveEmail(email: string, role: string) {
   const timestamp = Date.now();
-  await redis.lpush("emails", JSON.stringify({ email, role, timestamp }));
-  await redis.ltrim("emails", 0, 999); // Keep last 1000 emails
+  const entry = JSON.stringify({ email, role, timestamp });
+  await redis.lpush("emails", entry);
+  await redis.ltrim("emails", 0, 999);
 }
 
 export async function getEmails(limit: number = 100): Promise<any[]> {
