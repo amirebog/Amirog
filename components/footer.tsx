@@ -16,7 +16,7 @@ export function Footer() {
         {/* Brand */}
         <div>
           <h3 className="font-mono text-sm font-bold uppercase tracking-[0.3em] text-white">
-            Amirog Studio
+            blackEXE Studio
           </h3>
           <p className="mt-3 text-xs leading-5 text-muted-foreground">
             Designing modern digital experiences with clean grids, motion, and precision.
@@ -45,7 +45,7 @@ export function Footer() {
       <div className="relative border-t border-border/60">
         <div className="mx-auto flex max-w-[1400px] flex-col items-center justify-between gap-3 px-6 py-5 text-center sm:flex-row sm:text-left">
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
-            © 2026 Amirog Studio
+            © 2026 blackEXE Studio
           </p>
           <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted-foreground">
             Designed in the grid — Worldwide

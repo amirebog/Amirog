@@ -15,9 +15,9 @@ const editorial = Fraunces({
 })
 
 export const metadata: Metadata = {
-  title: 'Amirog — Launching Soon',
+  title: 'blackEXE — Launching Soon',
   description:
-    '????',
+    'soon',
   generator: 'amireb._.og',
   icons: {
     icon: [

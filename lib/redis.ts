@@ -2,10 +2,6 @@ import { Redis } from "@upstash/redis";
 
 export const redis = Redis.fromEnv();
 
-// ============================================
-//  Email & Contact functions
-// ============================================
-
 // === Email ===
 export async function incrementEmailCount() {
   return await redis.incr("email_count");

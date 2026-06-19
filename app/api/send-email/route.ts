@@ -5,7 +5,7 @@ import {
   redis,
   incrementEmailCount,
   incrementRoleCount,
-  saveContact, // 👈 تابع جدید برای ذخیره هر دو فیلد
+  saveContact,
 } from "@/lib/redis";
 import { validateEmail, sanitizeEmail } from "@/lib/validators";
 

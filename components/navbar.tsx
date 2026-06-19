@@ -19,7 +19,7 @@ export function Navbar() {
           <span className="flex h-6 w-6 items-center justify-center rounded-full bg-foreground">
             <span className="h-2 w-2 rounded-full bg-background" />
           </span>
-          <span className="font-heading text-lg tracking-tight">Amirog</span>
+          <span className="font-heading text-lg tracking-tight">blackexe</span>
         </a>
 
         {/* Links */}

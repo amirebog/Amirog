@@ -1,9 +1,9 @@
-# 🚀 Amirog
+# 🚀 blackEXE
 
 A modern and powerful web application built with Next.js, React, and modern web technologies.
 
-![GitHub stars](https://img.shields.io/github/stars/amirebog/Amirog?style=for-the-badge)
-![GitHub forks](https://img.shields.io/github/forks/amirebog/Amirog?style=for-the-badge)
+![GitHub stars](https://img.shields.io/github/stars/amirebog/exe?style=for-the-badge)
+![GitHub forks](https://img.shields.io/github/forks/amirebog/exe?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Next.js](https://img.shields.io/badge/Next.js-15-black?style=for-the-badge)
 
@@ -49,7 +49,7 @@ Add screenshots of your project here.
 Clone the repository:
 
 ```bash
-git clone https://github.com/amirebog/Amirog.git
+git clone https://github.com/amirebog/exe.git
 ```
 
 Navigate to the project:

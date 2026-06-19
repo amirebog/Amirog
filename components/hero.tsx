@@ -29,7 +29,7 @@ export function Hero() {
       >
         <span className="h-px w-8 bg-border" />
         <span className="font-mono text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-          Amirog Studio — Est. 2026
+          blackEXE Studio — Est. 2026
         </span>
         <span className="h-px w-8 bg-border" />
       </motion.div>
@@ -86,7 +86,7 @@ export function Hero() {
           transition={{ duration: 0.9, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
           className="font-heading text-[15vw] leading-[0.92] tracking-tight text-balance sm:text-7xl md:text-8xl lg:text-[7.5rem]"
         >
-          Amirog
+          black exe
           <br />
           Web App{" "}
           <span className="italic text-primary">Designer.</span>

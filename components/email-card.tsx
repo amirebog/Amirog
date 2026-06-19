@@ -54,7 +54,7 @@ export function EmailCard() {
       setError(null);
 
       try {
-        // استفاده از API جدید send-contact
+        
         const response = await fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
