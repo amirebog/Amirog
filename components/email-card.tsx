@@ -10,7 +10,7 @@ const roles = ["Founder", "Designer", "Developer", "Investor"];
 export function ContactCard() {
   // ===== State =====
   const [email, setEmail] = useState("");
-  const [contact, setContact] = useState(""); // Telegram ID or Phone
+  const [contact, setContact] = useState("");
   const [role, setRole] = useState("Designer");
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,9 +18,7 @@ export function ContactCard() {
   const [error, setError] = useState<string | null>(null);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
-  const [roleStats, setRoleStats] = useState<Record<string, number> | null>(
-    null
-  );
+  const [roleStats, setRoleStats] = useState<Record<string, number> | null>(null);
 
   const turnstileRef = useRef<TurnstileRef>(null);
   const pendingSubmitRef = useRef(false);
@@ -35,7 +33,7 @@ export function ContactCard() {
     return contact.trim().length >= 3;
   };
 
-  // ===== Submit form =====
+  // ===== Submit =====
   const submitForm = useCallback(
     async (token: string) => {
       if (!isMountedRef.current) return;
@@ -43,20 +41,12 @@ export function ContactCard() {
       const trimmedEmail = email.trim();
       const trimmedContact = contact.trim();
 
-      if (!trimmedEmail) {
-        setError("Please enter your email address");
-        return;
-      }
-      if (!validateEmail(trimmedEmail)) {
+      if (!trimmedEmail || !validateEmail(trimmedEmail)) {
         setError("Please enter a valid email address");
         return;
       }
-      if (!trimmedContact) {
-        setError("Please enter your Telegram ID or phone number");
-        return;
-      }
-      if (!validateContact(trimmedContact)) {
-        setError("Please enter at least 3 characters for Telegram ID/Phone");
+      if (!trimmedContact || !validateContact(trimmedContact)) {
+        setError("Please enter a valid Telegram ID or phone (min 3 chars)");
         return;
       }
 
@@ -89,9 +79,7 @@ export function ContactCard() {
       } catch (err) {
         if (isMountedRef.current) {
           setError(err instanceof Error ? err.message : "Unknown error");
-          if (turnstileRef.current) {
-            turnstileRef.current.reset();
-          }
+          if (turnstileRef.current) turnstileRef.current.reset();
           setTurnstileToken(null);
         }
       } finally {
@@ -130,12 +118,10 @@ export function ContactCard() {
     if (!isMountedRef.current) return;
     setTurnstileToken(null);
     setError("Verification expired. Please try again.");
-    if (turnstileRef.current) {
-      turnstileRef.current.reset();
-    }
+    if (turnstileRef.current) turnstileRef.current.reset();
   }, []);
 
-  // ===== Form submit handler =====
+  // ===== Form submit =====
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -146,20 +132,12 @@ export function ContactCard() {
       const trimmedEmail = email.trim();
       const trimmedContact = contact.trim();
 
-      if (!trimmedEmail) {
-        setError("Please enter your email address");
-        return;
-      }
-      if (!validateEmail(trimmedEmail)) {
+      if (!trimmedEmail || !validateEmail(trimmedEmail)) {
         setError("Please enter a valid email address");
         return;
       }
-      if (!trimmedContact) {
-        setError("Please enter your Telegram ID or phone number");
-        return;
-      }
-      if (!validateContact(trimmedContact)) {
-        setError("Please enter at least 3 characters");
+      if (!trimmedContact || !validateContact(trimmedContact)) {
+        setError("Please enter a valid Telegram ID or phone (min 3 chars)");
         return;
       }
 
@@ -191,7 +169,7 @@ export function ContactCard() {
     [email, contact, turnstileToken, isLoading, isVerifying, submitForm]
   );
 
-  // ===== Load saved data from localStorage =====
+  // ===== Effects =====
   useEffect(() => {
     async function loadStats() {
       try {
@@ -219,7 +197,6 @@ export function ContactCard() {
     };
   }, []);
 
-  // ===== Save to localStorage on change =====
   useEffect(() => {
     if (email) localStorage.setItem("pendingEmail", email);
   }, [email]);
@@ -234,6 +211,7 @@ export function ContactCard() {
     }
   }, [error]);
 
+  // ===== Render =====
   return (
     <motion.div
       initial={{ y: 40, opacity: 0 }}
@@ -309,7 +287,7 @@ export function ContactCard() {
                 onSubmit={handleSubmit}
                 className="mt-7 flex flex-col gap-4"
               >
-                {/* Email Field */}
+                {/* Email */}
                 <div>
                   <label
                     htmlFor="email"
@@ -329,7 +307,7 @@ export function ContactCard() {
                   />
                 </div>
 
-                {/* Telegram ID / Phone Field */}
+                {/* Telegram ID / Phone */}
                 <div>
                   <label
                     htmlFor="contact"
@@ -349,7 +327,7 @@ export function ContactCard() {
                   />
                 </div>
 
-                {/* Role Buttons */}
+                {/* Role */}
                 <div>
                   <span className="mb-2 block font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
                     I am a
@@ -387,7 +365,6 @@ export function ContactCard() {
                   />
                 </div>
 
-                {/* Status messages */}
                 {isVerifying && (
                   <motion.div
                     initial={{ opacity: 0 }}
@@ -409,7 +386,6 @@ export function ContactCard() {
                   </motion.div>
                 )}
 
-                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={isLoading || isVerifying}
