@@ -7,8 +7,10 @@ import { TurnstileWidget, TurnstileRef } from "./TurnstileWidget";
 
 const roles = ["Founder", "Designer", "Developer", "Investor"];
 
-export function EmailCard() {
+export function ContactCard() {
+  // ===== State =====
   const [email, setEmail] = useState("");
+  const [contact, setContact] = useState(""); // Telegram ID or Phone
   const [role, setRole] = useState("Designer");
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,17 +26,37 @@ export function EmailCard() {
   const pendingSubmitRef = useRef(false);
   const isMountedRef = useRef(true);
 
+  // ===== Validators =====
   const validateEmail = (email: string): boolean => {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   };
 
+  const validateContact = (contact: string): boolean => {
+    return contact.trim().length >= 3;
+  };
+
+  // ===== Submit form =====
   const submitForm = useCallback(
     async (token: string) => {
       if (!isMountedRef.current) return;
 
       const trimmedEmail = email.trim();
+      const trimmedContact = contact.trim();
+
       if (!trimmedEmail) {
         setError("Please enter your email address");
+        return;
+      }
+      if (!validateEmail(trimmedEmail)) {
+        setError("Please enter a valid email address");
+        return;
+      }
+      if (!trimmedContact) {
+        setError("Please enter your Telegram ID or phone number");
+        return;
+      }
+      if (!validateContact(trimmedContact)) {
+        setError("Please enter at least 3 characters for Telegram ID/Phone");
         return;
       }
 
@@ -42,11 +64,12 @@ export function EmailCard() {
       setError(null);
 
       try {
-        const response = await fetch("/api/send-email", {
+        const response = await fetch("/api/send-contact", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             email: trimmedEmail,
+            contact: trimmedContact,
             role,
             turnstileToken: token,
           }),
@@ -55,12 +78,13 @@ export function EmailCard() {
         const data = await response.json();
 
         if (!response.ok) {
-          throw new Error(data.error || "Failed to submit email");
+          throw new Error(data.error || "Failed to submit");
         }
 
         if (isMountedRef.current) {
           setSubmitted(true);
           localStorage.removeItem("pendingEmail");
+          localStorage.removeItem("pendingContact");
         }
       } catch (err) {
         if (isMountedRef.current) {
@@ -78,9 +102,10 @@ export function EmailCard() {
         }
       }
     },
-    [email, role]
+    [email, contact, role]
   );
 
+  // ===== Turnstile callbacks =====
   const handleTurnstileVerify = useCallback(
     (token: string) => {
       if (!isMountedRef.current) return;
@@ -110,6 +135,7 @@ export function EmailCard() {
     }
   }, []);
 
+  // ===== Form submit handler =====
   const handleSubmit = useCallback(
     async (e: React.FormEvent) => {
       e.preventDefault();
@@ -118,13 +144,22 @@ export function EmailCard() {
       if (isLoading || isVerifying) return;
 
       const trimmedEmail = email.trim();
+      const trimmedContact = contact.trim();
+
       if (!trimmedEmail) {
         setError("Please enter your email address");
         return;
       }
-
       if (!validateEmail(trimmedEmail)) {
         setError("Please enter a valid email address");
+        return;
+      }
+      if (!trimmedContact) {
+        setError("Please enter your Telegram ID or phone number");
+        return;
+      }
+      if (!validateContact(trimmedContact)) {
+        setError("Please enter at least 3 characters");
         return;
       }
 
@@ -153,9 +188,10 @@ export function EmailCard() {
         setError("Verification not available. Please refresh the page.");
       }
     },
-    [email, turnstileToken, isLoading, isVerifying, submitForm]
+    [email, contact, turnstileToken, isLoading, isVerifying, submitForm]
   );
 
+  // ===== Load saved data from localStorage =====
   useEffect(() => {
     async function loadStats() {
       try {
@@ -174,20 +210,23 @@ export function EmailCard() {
     loadStats();
 
     const savedEmail = localStorage.getItem("pendingEmail");
-    if (savedEmail && isMountedRef.current) {
-      setEmail(savedEmail);
-    }
+    const savedContact = localStorage.getItem("pendingContact");
+    if (savedEmail && isMountedRef.current) setEmail(savedEmail);
+    if (savedContact && isMountedRef.current) setContact(savedContact);
 
     return () => {
       isMountedRef.current = false;
     };
   }, []);
 
+  // ===== Save to localStorage on change =====
   useEffect(() => {
-    if (email) {
-      localStorage.setItem("pendingEmail", email);
-    }
+    if (email) localStorage.setItem("pendingEmail", email);
   }, [email]);
+
+  useEffect(() => {
+    if (contact) localStorage.setItem("pendingContact", contact);
+  }, [contact]);
 
   useEffect(() => {
     if (error && turnstileRef.current) {
@@ -222,7 +261,7 @@ export function EmailCard() {
             Early access
           </p>
           <h2 className="mt-3 font-heading text-3xl leading-tight tracking-tight text-balance">
-            If you like, give me your email.
+            Get in touch
           </h2>
           <p className="mt-3 text-sm leading-relaxed text-white/60">
             Join the founding circle. Limited invitations to shape what
@@ -270,6 +309,7 @@ export function EmailCard() {
                 onSubmit={handleSubmit}
                 className="mt-7 flex flex-col gap-4"
               >
+                {/* Email Field */}
                 <div>
                   <label
                     htmlFor="email"
@@ -289,6 +329,27 @@ export function EmailCard() {
                   />
                 </div>
 
+                {/* Telegram ID / Phone Field */}
+                <div>
+                  <label
+                    htmlFor="contact"
+                    className="mb-2 block font-mono text-[11px] uppercase tracking-[0.2em] text-white/40"
+                  >
+                    Telegram ID / Phone
+                  </label>
+                  <input
+                    id="contact"
+                    type="text"
+                    required
+                    value={contact}
+                    onChange={(e) => setContact(e.target.value)}
+                    placeholder="@username or +1234567890"
+                    disabled={isLoading || isVerifying}
+                    className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-primary/60 focus:bg-white/10 disabled:opacity-50"
+                  />
+                </div>
+
+                {/* Role Buttons */}
                 <div>
                   <span className="mb-2 block font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
                     I am a
@@ -316,6 +377,7 @@ export function EmailCard() {
                   </div>
                 </div>
 
+                {/* Turnstile */}
                 <div className="flex justify-center">
                   <TurnstileWidget
                     ref={turnstileRef}
@@ -325,6 +387,7 @@ export function EmailCard() {
                   />
                 </div>
 
+                {/* Status messages */}
                 {isVerifying && (
                   <motion.div
                     initial={{ opacity: 0 }}
@@ -346,6 +409,7 @@ export function EmailCard() {
                   </motion.div>
                 )}
 
+                {/* Submit Button */}
                 <button
                   type="submit"
                   disabled={isLoading || isVerifying}

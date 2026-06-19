@@ -5,7 +5,7 @@ import {
   redis,
   incrementEmailCount,
   incrementRoleCount,
-  saveEmail,
+  saveContact, // 👈 تابع جدید برای ذخیره هر دو فیلد
 } from "@/lib/redis";
 import { validateEmail, sanitizeEmail } from "@/lib/validators";
 
@@ -39,6 +39,7 @@ async function verifyTurnstile(token: string): Promise<boolean> {
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. Rate Limiting
     const ip = req.headers.get("x-forwarded-for") || "anonymous";
     const { success: rateLimitSuccess } = await ratelimit.limit(ip);
     if (!rateLimitSuccess) {
@@ -48,13 +49,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 2. Parse body
     const body = await req.json();
-    const { email, role, turnstileToken } = body;
+    const { email, contact, role, turnstileToken } = body;
 
+    // 3. Validate Turnstile
     if (!turnstileToken) {
-      return NextResponse.json({ error: "Verification required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Verification required" },
+        { status: 400 }
+      );
     }
-
     const isValidTurnstile = await verifyTurnstile(turnstileToken);
     if (!isValidTurnstile) {
       return NextResponse.json(
@@ -63,36 +68,60 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 4. Validate Email
     if (!email || typeof email !== "string" || email.trim() === "") {
-      return NextResponse.json({ error: "Valid email is required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Valid email is required" },
+        { status: 400 }
+      );
     }
-
     const sanitizedEmail = sanitizeEmail(email.trim());
     if (!sanitizedEmail || !validateEmail(sanitizedEmail)) {
-      return NextResponse.json({ error: "Invalid email format" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid email format" },
+        { status: 400 }
+      );
     }
 
+    // 5. Validate Contact (Telegram ID or Phone)
+    if (!contact || typeof contact !== "string" || contact.trim().length < 3) {
+      return NextResponse.json(
+        { error: "Please enter a valid Telegram ID or phone number (min 3 characters)" },
+        { status: 400 }
+      );
+    }
+    const trimmedContact = contact.trim();
+
+    // 6. Validate Role
     const validRoles = ["Founder", "Designer", "Developer", "Investor"];
     if (!role || typeof role !== "string" || !validRoles.includes(role)) {
-      return NextResponse.json({ error: "Please select a valid role" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Please select a valid role" },
+        { status: 400 }
+      );
     }
 
+    // 7. Save to Redis
     await Promise.all([
-      saveEmail(sanitizedEmail, role),
+      saveContact(sanitizedEmail, trimmedContact, role), // ذخیره هر دو
       incrementEmailCount(),
       incrementRoleCount(role),
     ]);
 
+    // 8. Send Telegram message with both fields
     const message = `
-📩 *New email collected from site*
+📩 *New contact collected from site*
 
 👤 *Role:* ${role}
 📧 *Email:* ${sanitizedEmail}
+📱 *Telegram ID / Phone:* ${trimmedContact}
 
 🕒 *Time:* ${new Date().toLocaleString("en-US", { timeZone: "UTC" })}
     `;
 
-    await bot.api.sendMessage(CHAT_ID, message, { parse_mode: "Markdown" });
+    await bot.api.sendMessage(CHAT_ID, message, {
+      parse_mode: "Markdown",
+    });
 
     return NextResponse.json({ success: true });
   } catch (error) {
