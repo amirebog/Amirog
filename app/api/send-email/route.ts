@@ -14,32 +14,12 @@ const CHAT_ID = process.env.TELEGRAM_CHAT_ID!;
 
 const ratelimit = new Ratelimit({
   redis: redis,
-  limiter: Ratelimit.slidingWindow(3, "1h"),
+  limiter: Ratelimit.slidingWindow(3, "1h"), // ۳ درخواست در هر ساعت برای هر IP
 });
-
-async function verifyTurnstile(token: string): Promise<boolean> {
-  try {
-    const res = await fetch(
-      "https://challenges.cloudflare.com/turnstile/v0/siteverify",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({
-          secret: process.env.TURNSTILE_SECRET_KEY!,
-          response: token,
-        }),
-      }
-    );
-    const data = await res.json();
-    return data.success === true;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
-    // 1. Rate Limiting
+    // ۱. محدودیت نرخ درخواست
     const ip = req.headers.get("x-forwarded-for") || "anonymous";
     const { success: rateLimitSuccess } = await ratelimit.limit(ip);
     if (!rateLimitSuccess) {
@@ -49,26 +29,26 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Parse body
+    // ۲. دریافت داده‌ها
     const body = await req.json();
-    const { email, contact, role, turnstileToken } = body;
+    const { email, contact, role, timestamp } = body;
 
-    // 3. Validate Turnstile
-    if (!turnstileToken) {
+    // ۳. بررسی timestamp (ضد اسپم)
+    if (!timestamp || typeof timestamp !== "number") {
       return NextResponse.json(
-        { error: "Verification required" },
+        { error: "Invalid request: missing timestamp" },
         { status: 400 }
       );
     }
-    const isValidTurnstile = await verifyTurnstile(turnstileToken);
-    if (!isValidTurnstile) {
+    const elapsed = Date.now() - timestamp;
+    if (elapsed < 3000) {
       return NextResponse.json(
-        { error: "Verification failed. Please try again." },
+        { error: "Form submitted too quickly. Please take your time." },
         { status: 400 }
       );
     }
 
-    // 4. Validate Email
+    // ۴. اعتبارسنجی ایمیل
     if (!email || typeof email !== "string" || email.trim() === "") {
       return NextResponse.json(
         { error: "Valid email is required" },
@@ -83,7 +63,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 5. Validate Contact (Telegram ID or Phone)
+    // ۵. اعتبارسنجی تماس (تلگرام یا شماره)
     if (!contact || typeof contact !== "string" || contact.trim().length < 3) {
       return NextResponse.json(
         { error: "Please enter a valid Telegram ID or phone number (min 3 characters)" },
@@ -92,7 +72,7 @@ export async function POST(req: NextRequest) {
     }
     const trimmedContact = contact.trim();
 
-    // 6. Validate Role
+    // ۶. اعتبارسنجی نقش
     const validRoles = ["Founder", "Designer", "Developer", "Investor"];
     if (!role || typeof role !== "string" || !validRoles.includes(role)) {
       return NextResponse.json(
@@ -101,14 +81,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 7. Save to Redis
+    // ۷. ذخیره در Redis
     await Promise.all([
-      saveContact(sanitizedEmail, trimmedContact, role), // ذخیره هر دو
+      saveContact(sanitizedEmail, trimmedContact, role),
       incrementEmailCount(),
       incrementRoleCount(role),
     ]);
 
-    // 8. Send Telegram message with both fields
+    // ۸. ارسال پیام به تلگرام
     const message = `
 📩 *New contact collected from site*
 

@@ -3,7 +3,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { ArrowRight, Check, Loader2 } from "lucide-react";
-import { TurnstileWidget, TurnstileRef } from "./TurnstileWidget";
 
 const roles = ["Founder", "Designer", "Developer", "Investor"];
 
@@ -14,16 +13,14 @@ export function EmailCard() {
   const [role, setRole] = useState("Designer");
   const [submitted, setSubmitted] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
   const [roleStats, setRoleStats] = useState<Record<string, number> | null>(null);
 
-  const turnstileRef = useRef<TurnstileRef>(null);
-  const pendingSubmitRef = useRef(false);
+  // ===== Anti-spam refs =====
+  const formStartTimeRef = useRef<number>(Date.now());
+  const honeypotRef = useRef<HTMLInputElement>(null);
   const isMountedRef = useRef(true);
-  const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
 
   // ===== Validators =====
   const validateEmail = (email: string): boolean => {
@@ -34,22 +31,35 @@ export function EmailCard() {
     return contact.trim().length >= 3;
   };
 
-  // ===== Clear timeout helper =====
-  const clearVerificationTimeout = useCallback(() => {
-    if (timeoutIdRef.current) {
-      clearTimeout(timeoutIdRef.current);
-      timeoutIdRef.current = null;
-    }
-  }, []);
-
   // ===== Submit =====
   const submitForm = useCallback(
-    async (token: string) => {
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+
       if (!isMountedRef.current) return;
+      if (isLoading) return;
 
       const trimmedEmail = email.trim();
       const trimmedContact = contact.trim();
 
+      // ========== Anti-spam checks ==========
+      // 1. Honeypot: should be empty
+      const honeypotValue = honeypotRef.current?.value || "";
+      if (honeypotValue.length > 0) {
+        console.warn("🐝 Honeypot triggered (spam detected)");
+        setError("Spam detected. Please try again.");
+        return;
+      }
+
+      // 2. Time check: must have taken at least 3 seconds to fill the form
+      const elapsedTime = (Date.now() - formStartTimeRef.current) / 1000;
+      if (elapsedTime < 3) {
+        console.warn("⏱️ Form submitted too quickly (spam suspected)");
+        setError("Please take a moment to fill the form.");
+        return;
+      }
+
+      // 3. Standard validations
       if (!trimmedEmail || !validateEmail(trimmedEmail)) {
         setError("Please enter a valid email address");
         return;
@@ -61,7 +71,6 @@ export function EmailCard() {
 
       setIsLoading(true);
       setError(null);
-      clearVerificationTimeout(); // clear any pending timeout
 
       try {
         const response = await fetch("/api/send-email", {
@@ -71,7 +80,7 @@ export function EmailCard() {
             email: trimmedEmail,
             contact: trimmedContact,
             role,
-            turnstileToken: token,
+            timestamp: formStartTimeRef.current, // ارسال زمان شروع به سرور
           }),
         });
 
@@ -85,116 +94,18 @@ export function EmailCard() {
           setSubmitted(true);
           localStorage.removeItem("pendingEmail");
           localStorage.removeItem("pendingContact");
-          // Reset turnstile after success (optional)
-          if (turnstileRef.current) turnstileRef.current.reset();
         }
       } catch (err) {
         if (isMountedRef.current) {
           setError(err instanceof Error ? err.message : "Unknown error");
-          // Reset turnstile and clear token on error
-          if (turnstileRef.current) turnstileRef.current.reset();
-          setTurnstileToken(null);
         }
       } finally {
         if (isMountedRef.current) {
           setIsLoading(false);
-          setIsVerifying(false);
-          pendingSubmitRef.current = false;
         }
       }
     },
-    [email, contact, role, clearVerificationTimeout]
-  );
-
-  // ===== Turnstile callbacks =====
-  const handleTurnstileVerify = useCallback(
-    (token: string) => {
-      if (!isMountedRef.current) return;
-      clearVerificationTimeout();
-      setTurnstileToken(token);
-      setIsVerifying(false);
-
-      if (pendingSubmitRef.current) {
-        pendingSubmitRef.current = false;
-        submitForm(token);
-      }
-    },
-    [submitForm, clearVerificationTimeout]
-  );
-
-  const handleTurnstileError = useCallback(() => {
-    if (!isMountedRef.current) return;
-    clearVerificationTimeout();
-    setIsVerifying(false);
-    setTurnstileToken(null);
-    setError("Verification failed. Please try again.");
-    pendingSubmitRef.current = false;
-    if (turnstileRef.current) turnstileRef.current.reset();
-  }, [clearVerificationTimeout]);
-
-  const handleTurnstileExpire = useCallback(() => {
-    if (!isMountedRef.current) return;
-    clearVerificationTimeout();
-    setTurnstileToken(null);
-    setError("Verification expired. Please try again.");
-    setIsVerifying(false);
-    pendingSubmitRef.current = false;
-    if (turnstileRef.current) turnstileRef.current.reset();
-  }, [clearVerificationTimeout]);
-
-  // ===== Form submit =====
-  const handleSubmit = useCallback(
-    async (e: React.FormEvent) => {
-      e.preventDefault();
-
-      if (!isMountedRef.current) return;
-      if (isLoading || isVerifying) return;
-
-      const trimmedEmail = email.trim();
-      const trimmedContact = contact.trim();
-
-      if (!trimmedEmail || !validateEmail(trimmedEmail)) {
-        setError("Please enter a valid email address");
-        return;
-      }
-      if (!trimmedContact || !validateContact(trimmedContact)) {
-        setError("Please enter a valid Telegram ID or phone (min 3 chars)");
-        return;
-      }
-
-      setError(null);
-
-      // If we already have a valid token, submit directly
-      if (turnstileToken) {
-        await submitForm(turnstileToken);
-        return;
-      }
-
-      // Otherwise, start verification
-      setIsVerifying(true);
-      pendingSubmitRef.current = true;
-
-      if (turnstileRef.current) {
-        turnstileRef.current.execute();
-
-        // Set a timeout to prevent infinite waiting
-        clearVerificationTimeout();
-        timeoutIdRef.current = setTimeout(() => {
-          if (pendingSubmitRef.current && isMountedRef.current) {
-            pendingSubmitRef.current = false;
-            setIsVerifying(false);
-            setTurnstileToken(null);
-            setError("Verification timed out. Please try again.");
-            if (turnstileRef.current) turnstileRef.current.reset();
-          }
-          timeoutIdRef.current = null;
-        }, 30000); // increased to 30 seconds
-      } else {
-        setIsVerifying(false);
-        setError("Verification not available. Please refresh the page.");
-      }
-    },
-    [email, contact, turnstileToken, isLoading, isVerifying, submitForm, clearVerificationTimeout]
+    [email, contact, role, isLoading]
   );
 
   // ===== Effects =====
@@ -220,13 +131,15 @@ export function EmailCard() {
     if (savedEmail && isMountedRef.current) setEmail(savedEmail);
     if (savedContact && isMountedRef.current) setContact(savedContact);
 
+    // Reset form start time on mount
+    formStartTimeRef.current = Date.now();
+
     return () => {
       isMountedRef.current = false;
-      clearVerificationTimeout();
     };
-  }, [clearVerificationTimeout]);
+  }, []);
 
-  // Save to localStorage only when non-empty, otherwise remove
+  // Save to localStorage
   useEffect(() => {
     if (email) {
       localStorage.setItem("pendingEmail", email);
@@ -316,7 +229,7 @@ export function EmailCard() {
                 key="form"
                 initial={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                onSubmit={handleSubmit}
+                onSubmit={submitForm}
                 className="mt-7 flex flex-col gap-4"
               >
                 {/* Email */}
@@ -334,7 +247,7 @@ export function EmailCard() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="you@studio.com"
-                    disabled={isLoading || isVerifying}
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-primary/60 focus:bg-white/10 disabled:opacity-50"
                   />
                 </div>
@@ -354,7 +267,7 @@ export function EmailCard() {
                     value={contact}
                     onChange={(e) => setContact(e.target.value)}
                     placeholder="@username or +1234567890"
-                    disabled={isLoading || isVerifying}
+                    disabled={isLoading}
                     className="w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none transition focus:border-primary/60 focus:bg-white/10 disabled:opacity-50"
                   />
                 </div>
@@ -369,17 +282,13 @@ export function EmailCard() {
                       <button
                         key={r}
                         type="button"
-                        onClick={() => !isLoading && !isVerifying && setRole(r)}
+                        onClick={() => !isLoading && setRole(r)}
                         className={`rounded-full border px-3.5 py-1.5 text-xs transition-colors ${
                           role === r
                             ? "border-primary bg-primary text-primary-foreground"
                             : "border-white/15 text-white/60 hover:border-white/40"
-                        } ${
-                          isLoading || isVerifying
-                            ? "opacity-50 cursor-not-allowed"
-                            : ""
-                        }`}
-                        disabled={isLoading || isVerifying}
+                        } ${isLoading ? "opacity-50 cursor-not-allowed" : ""}`}
+                        disabled={isLoading}
                       >
                         {r}
                       </button>
@@ -387,26 +296,20 @@ export function EmailCard() {
                   </div>
                 </div>
 
-                {/* Turnstile */}
-                <div className="flex justify-center">
-                  <TurnstileWidget
-                    ref={turnstileRef}
-                    onVerify={handleTurnstileVerify}
-                    onError={handleTurnstileError}
-                    onExpire={handleTurnstileExpire}
+                {/* ===== HONEYPOT (hidden from users) ===== */}
+                <div className="hidden" aria-hidden="true">
+                  <label htmlFor="honeypot">Leave this empty</label>
+                  <input
+                    ref={honeypotRef}
+                    id="honeypot"
+                    type="text"
+                    name="honeypot"
+                    tabIndex={-1}
+                    autoComplete="off"
+                    className="absolute opacity-0 pointer-events-none"
+                    onChange={() => {}} // intentional no-op
                   />
                 </div>
-
-                {isVerifying && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-sm text-blue-400 bg-blue-500/10 p-3 rounded-xl border border-blue-500/20 flex items-center gap-2"
-                  >
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Verifying...
-                  </motion.div>
-                )}
 
                 {error && (
                   <motion.div
@@ -420,18 +323,13 @@ export function EmailCard() {
 
                 <button
                   type="submit"
-                  disabled={isLoading || isVerifying}
+                  disabled={isLoading}
                   className="group mt-1 flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3.5 text-sm font-medium text-primary-foreground transition-transform hover:-translate-y-0.5 disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0"
                 >
                   {isLoading ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Sending...
-                    </>
-                  ) : isVerifying ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Verifying...
                     </>
                   ) : (
                     <>
