@@ -23,6 +23,7 @@ export function EmailCard() {
   const turnstileRef = useRef<TurnstileRef>(null);
   const pendingSubmitRef = useRef(false);
   const isMountedRef = useRef(true);
+  const timeoutIdRef = useRef<NodeJS.Timeout | null>(null);
 
   // ===== Validators =====
   const validateEmail = (email: string): boolean => {
@@ -32,6 +33,14 @@ export function EmailCard() {
   const validateContact = (contact: string): boolean => {
     return contact.trim().length >= 3;
   };
+
+  // ===== Clear timeout helper =====
+  const clearVerificationTimeout = useCallback(() => {
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current);
+      timeoutIdRef.current = null;
+    }
+  }, []);
 
   // ===== Submit =====
   const submitForm = useCallback(
@@ -52,9 +61,9 @@ export function EmailCard() {
 
       setIsLoading(true);
       setError(null);
+      clearVerificationTimeout(); // clear any pending timeout
 
       try {
-        
         const response = await fetch("/api/send-email", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -76,10 +85,13 @@ export function EmailCard() {
           setSubmitted(true);
           localStorage.removeItem("pendingEmail");
           localStorage.removeItem("pendingContact");
+          // Reset turnstile after success (optional)
+          if (turnstileRef.current) turnstileRef.current.reset();
         }
       } catch (err) {
         if (isMountedRef.current) {
           setError(err instanceof Error ? err.message : "Unknown error");
+          // Reset turnstile and clear token on error
           if (turnstileRef.current) turnstileRef.current.reset();
           setTurnstileToken(null);
         }
@@ -91,36 +103,44 @@ export function EmailCard() {
         }
       }
     },
-    [email, contact, role]
+    [email, contact, role, clearVerificationTimeout]
   );
 
   // ===== Turnstile callbacks =====
   const handleTurnstileVerify = useCallback(
     (token: string) => {
       if (!isMountedRef.current) return;
+      clearVerificationTimeout();
       setTurnstileToken(token);
       setIsVerifying(false);
+
       if (pendingSubmitRef.current) {
         pendingSubmitRef.current = false;
         submitForm(token);
       }
     },
-    [submitForm]
+    [submitForm, clearVerificationTimeout]
   );
 
   const handleTurnstileError = useCallback(() => {
     if (!isMountedRef.current) return;
+    clearVerificationTimeout();
     setIsVerifying(false);
+    setTurnstileToken(null);
     setError("Verification failed. Please try again.");
     pendingSubmitRef.current = false;
-  }, []);
+    if (turnstileRef.current) turnstileRef.current.reset();
+  }, [clearVerificationTimeout]);
 
   const handleTurnstileExpire = useCallback(() => {
     if (!isMountedRef.current) return;
+    clearVerificationTimeout();
     setTurnstileToken(null);
     setError("Verification expired. Please try again.");
+    setIsVerifying(false);
+    pendingSubmitRef.current = false;
     if (turnstileRef.current) turnstileRef.current.reset();
-  }, []);
+  }, [clearVerificationTimeout]);
 
   // ===== Form submit =====
   const handleSubmit = useCallback(
@@ -144,30 +164,37 @@ export function EmailCard() {
 
       setError(null);
 
+      // If we already have a valid token, submit directly
       if (turnstileToken) {
         await submitForm(turnstileToken);
         return;
       }
 
+      // Otherwise, start verification
       setIsVerifying(true);
       pendingSubmitRef.current = true;
 
       if (turnstileRef.current) {
         turnstileRef.current.execute();
 
-        setTimeout(() => {
+        // Set a timeout to prevent infinite waiting
+        clearVerificationTimeout();
+        timeoutIdRef.current = setTimeout(() => {
           if (pendingSubmitRef.current && isMountedRef.current) {
             pendingSubmitRef.current = false;
             setIsVerifying(false);
+            setTurnstileToken(null);
             setError("Verification timed out. Please try again.");
+            if (turnstileRef.current) turnstileRef.current.reset();
           }
-        }, 15000);
+          timeoutIdRef.current = null;
+        }, 30000); // increased to 30 seconds
       } else {
         setIsVerifying(false);
         setError("Verification not available. Please refresh the page.");
       }
     },
-    [email, contact, turnstileToken, isLoading, isVerifying, submitForm]
+    [email, contact, turnstileToken, isLoading, isVerifying, submitForm, clearVerificationTimeout]
   );
 
   // ===== Effects =====
@@ -195,22 +222,26 @@ export function EmailCard() {
 
     return () => {
       isMountedRef.current = false;
+      clearVerificationTimeout();
     };
-  }, []);
+  }, [clearVerificationTimeout]);
 
+  // Save to localStorage only when non-empty, otherwise remove
   useEffect(() => {
-    if (email) localStorage.setItem("pendingEmail", email);
+    if (email) {
+      localStorage.setItem("pendingEmail", email);
+    } else {
+      localStorage.removeItem("pendingEmail");
+    }
   }, [email]);
 
   useEffect(() => {
-    if (contact) localStorage.setItem("pendingContact", contact);
-  }, [contact]);
-
-  useEffect(() => {
-    if (error && turnstileRef.current) {
-      turnstileRef.current.reset();
+    if (contact) {
+      localStorage.setItem("pendingContact", contact);
+    } else {
+      localStorage.removeItem("pendingContact");
     }
-  }, [error]);
+  }, [contact]);
 
   // ===== Render =====
   return (
