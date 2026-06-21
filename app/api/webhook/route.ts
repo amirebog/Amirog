@@ -4,7 +4,7 @@ import { redis } from "@/lib/redis";
 
 
 
-const BOT_TOKEN = process.env.BOT_TOKEN!;
+const BOT_TOKEN = process.env.BOT_TOKEN2!;
 const ADMIN_ID = parseInt(process.env.ADMIN_ID!);
 
 const bot = new Bot(BOT_TOKEN);
